@@ -12,6 +12,7 @@ repository = "https://github.com/langston-barrett/duckalog"
 
 [dependencies]
 duckdb = { features = ["bundled"], version = "0.7" }
+fallible-streaming-iterator = "0.1"
 thiserror = "1"
 
 [profile.dev]

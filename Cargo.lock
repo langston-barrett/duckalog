@@ -439,6 +439,7 @@ name = "duckalog"
 version = "0.0.0"
 dependencies = [
  "duckdb",
+ "fallible-streaming-iterator",
  "thiserror",
 ]
 

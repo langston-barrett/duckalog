@@ -4,9 +4,8 @@ use crate::ast::{Atom, Program, Rel};
 
 #[derive(Debug)]
 pub struct Eval {
-    // TODO: rm pub
-    pub conn: Connection,
-    pub prog: Program,
+    conn: Connection,
+    prog: Program,
 }
 
 fn create_table(rel: &Rel, arity: usize) -> String {
@@ -17,7 +16,7 @@ fn create_table(rel: &Rel, arity: usize) -> String {
             attrs += ",\n";
         }
     }
-    // TODO: delta
+    // TODO(lb, high): add delta for semi-naive
     format!(
         r"CREATE SEQUENCE {0}_seq;
           CREATE TABLE {0} (
@@ -39,6 +38,8 @@ fn create_tables(conn: &Connection, prog: &Program) -> Result<()> {
     Ok(())
 }
 
+// TODO(lb, high): Handle duplicate facts
+// TODO(lb, low): Group facts by relation, use Appender
 fn insert_fact(conn: &Connection, fact: &Atom) -> Result<()> {
     let mut q = format!(r"INSERT INTO {0} VALUES (nextval('{0}_seq')", fact.rel);
     for _ in &fact.terms {
@@ -78,12 +79,23 @@ impl Eval {
         insert_facts(&conn, &prog)?;
         Ok(Self { conn, prog })
     }
+
+    pub fn into_connection(self) -> Connection {
+        self.conn
+    }
+
+    pub fn into_program(self) -> Program {
+        self.prog
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use fallible_streaming_iterator::FallibleStreamingIterator;
+
     use crate::ast::{Atom, Const, Rel, Rule, Term};
+
+    use super::*;
 
     fn null_atom() -> Atom {
         Atom::new(Rel::new(String::from("r")), Vec::new())
@@ -116,5 +128,16 @@ mod tests {
         let prog = Program::new(vec![unary_fact()]).unwrap();
         let conn = Connection::open_in_memory().unwrap();
         Eval::new(conn, prog).unwrap();
+    }
+
+    #[test]
+    fn test_same_fact() {
+        let prog = Program::new(vec![null_fact(), null_fact()]).unwrap();
+        let conn = Connection::open_in_memory().unwrap();
+        let eval = Eval::new(conn, prog).unwrap();
+        let conn = eval.into_connection();
+        let mut entries = conn.prepare("SELECT * from r;").unwrap();
+        // TODO: Should be 1!
+        assert_eq!(2, entries.query([]).unwrap().count().unwrap());
     }
 }
