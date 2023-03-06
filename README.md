@@ -2,6 +2,8 @@
 
 Duckalog is a database engine built on DuckDB.
 
+Currently only usable as a Rust library; there is no parser.
+
 ## Features
 
 Almost none!
