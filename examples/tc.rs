@@ -49,11 +49,15 @@ fn main() {
 
     let conn = Connection::open_in_memory().unwrap();
     let exec = Eval::new(conn, mir).unwrap();
-    assert_eq!(2, exec.go().unwrap());
+    exec.go().unwrap();
     let model = exec.model().unwrap();
+    let edges = model.get(&edge).unwrap();
     let paths = model.get(&path).unwrap();
+    debug_assert!(paths.len() >= edges.len());
     let lock = std::io::stdout();
-    let mut writer = csv::Writer::from_writer(lock);
+    let mut writer = csv::WriterBuilder::new()
+        .quote_style(csv::QuoteStyle::NonNumeric)
+        .from_writer(lock);
     for path in paths {
         debug_assert!(path.len() == 2);
         writer
