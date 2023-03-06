@@ -1,0 +1,8 @@
+.decl edge(X: symbol, Y: symbol)
+.input edge(IO=file, filename="edge.csv", rfc4180=true)
+
+.decl path(X: symbol, Y: symbol)
+.output path(IO=file, filename="path.csv", rfc4180=true)
+
+path(X, Y) :- edge(X, Y).
+path(X, Z) :- path(X, Y), edge(Y, Z).

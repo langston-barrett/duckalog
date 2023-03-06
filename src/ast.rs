@@ -15,6 +15,8 @@ pub enum Error {
     Ungrounded { rule: Rule, var: Var },
 }
 
+// ------------------------------------------------------------------
+
 // TODO(lb, low): other types
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Const(String);
@@ -28,6 +30,12 @@ impl Display for Const {
 impl duckdb::ToSql for Const {
     fn to_sql(&self) -> duckdb::Result<ToSqlOutput<'_>> {
         Ok(ToSqlOutput::Borrowed(ValueRef::Text(self.0.as_bytes())))
+    }
+}
+
+impl From<Const> for String {
+    fn from(c: Const) -> Self {
+        c.0
     }
 }
 
@@ -52,6 +60,8 @@ impl Const {
     }
 }
 
+// ------------------------------------------------------------------
+
 // TODO(lb): check for uppercase
 // TODO(lb, low): small string optimization, or:
 // TODO(lb, low): replace with indices into a hash-cons table
@@ -61,6 +71,12 @@ pub struct Var(String);
 impl Display for Var {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl From<Var> for String {
+    fn from(v: Var) -> Self {
+        v.0
     }
 }
 
@@ -85,6 +101,8 @@ impl Var {
     }
 }
 
+// ------------------------------------------------------------------
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Term {
     Const(Const),
@@ -99,6 +117,8 @@ impl Display for Term {
         }
     }
 }
+
+// ------------------------------------------------------------------
 
 // TODO(lb, low): small string optimization, or:
 // TODO(lb, low): replace with indices into a hash-cons table
@@ -116,6 +136,8 @@ impl Rel {
         Self(name)
     }
 }
+
+// ------------------------------------------------------------------
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Atom {
@@ -155,6 +177,8 @@ impl Atom {
     }
 }
 
+// ------------------------------------------------------------------
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct GroundAtom {
     pub(crate) rel: Rel,
@@ -166,6 +190,8 @@ impl GroundAtom {
         Self { rel, terms }
     }
 }
+
+// ------------------------------------------------------------------
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Rule {
@@ -197,6 +223,8 @@ impl Rule {
         self.body.is_empty()
     }
 }
+
+// ------------------------------------------------------------------
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Ast {
@@ -296,6 +324,8 @@ impl Ast {
         Ok(())
     }
 }
+
+// ------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

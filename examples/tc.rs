@@ -19,24 +19,45 @@ fn main() {
             vec![Atom::new(edge.clone(), vec![x.clone(), y.clone()])],
         ),
         Rule::new(
-            Atom::new(path, vec![x.clone(), z.clone()]),
+            Atom::new(path.clone(), vec![x.clone(), z.clone()]),
             vec![
                 Atom::new(edge.clone(), vec![x.clone(), y.clone()]),
-                Atom::new(edge.clone(), vec![y.clone(), z.clone()]),
+                Atom::new(path.clone(), vec![y.clone(), z.clone()]),
             ],
         ),
     ])
     .unwrap();
 
     let mut mir = Mir::new(ast).unwrap();
-    let a = Const::new("a".to_string()).unwrap();
-    let b = Const::new("b".to_string()).unwrap();
-    let c = Const::new("c".to_string()).unwrap();
-    mir.add_fact(&edge, vec![a, b.clone()]);
-    mir.add_fact(&edge, vec![b, c]);
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(std::io::stdin());
+    for rec0 in reader.records() {
+        let rec = rec0.unwrap();
+        if rec.len() != 2 {
+            eprintln!("Bad record");
+            continue;
+        }
+        mir.add_fact(
+            &edge,
+            vec![
+                Const::new(rec[0].to_string()).unwrap(),
+                Const::new(rec[1].to_string()).unwrap(),
+            ],
+        );
+    }
 
     let conn = Connection::open_in_memory().unwrap();
     let exec = Eval::new(conn, mir).unwrap();
     assert_eq!(2, exec.go().unwrap());
-    println!("{:?}", exec.model().unwrap());
+    let model = exec.model().unwrap();
+    let paths = model.get(&path).unwrap();
+    let lock = std::io::stdout();
+    let mut writer = csv::Writer::from_writer(lock);
+    for path in paths {
+        debug_assert!(path.len() == 2);
+        writer
+            .write_record(&[String::from(path[0].clone()), String::from(path[1].clone())])
+            .unwrap();
+    }
 }

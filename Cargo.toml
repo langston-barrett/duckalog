@@ -10,6 +10,9 @@ readme = "README.md"
 homepage = "https://github.com/langston-barrett/duckalog"
 repository = "https://github.com/langston-barrett/duckalog"
 
+[dev-dependencies]
+csv = "1"
+
 [dependencies]
 duckdb = { features = ["bundled"], version = "0.7" }
 fallible-streaming-iterator = "0.1"
