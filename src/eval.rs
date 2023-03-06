@@ -80,6 +80,7 @@ fn insert_fact_if_not_exists(conn: &Connection, rel: &Rel, consts: &Vec<Const>) 
     insert_fact(conn, rel, consts)
 }
 
+/// See also https://github.com/philzook58/duckegg/blob/e6c9fc106098e837095c461521c451c18e53c091/duckegg.py#L101
 fn eval_rule(_conn: &Connection, _rule: &Rule) -> Result<bool> {
     // TODO
     Ok(false)
