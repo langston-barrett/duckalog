@@ -1,0 +1,26 @@
+[package]
+name = "duckalog"
+version = "0.0.0"
+edition = "2021"
+description = "Datalog engine based on DuckDB"
+keywords = ["datalog", "duckdb"]
+authors = ["Langston Barrett <langston.barrett@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/langston-barrett/duckalog"
+repository = "https://github.com/langston-barrett/duckalog"
+
+[dependencies]
+duckdb = "0.7"
+thiserror = "1"
+
+[profile.dev]
+# Disabling debug info speeds up builds and CI. If needed for debugging, it can
+# be manually enabled by changing this line.
+#
+# https://matklad.github.io/2021/09/04/fast-rust-builds.html#CI-Workflow
+debug = 0
+
+# https://nnethercote.github.io/perf-book/build-configuration.html
+[profile.release]
+lto = "thin"
