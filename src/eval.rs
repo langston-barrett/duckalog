@@ -11,13 +11,13 @@ pub struct Eval {
 }
 
 fn create_table(rel: &Rel, arity: usize) -> String {
-    let mut attrs = String::new();
+    let mut attrs = Vec::with_capacity(arity);
+    let mut indices = Vec::new();
     for i in 0..arity {
-        attrs += &format!("x{i}  TEXT NOT NULL");
-        if i + 1 != arity {
-            attrs += ",\n";
-        }
+        attrs.push(format!("x{i}  TEXT NOT NULL"));
+        indices.push(format!("CREATE INDEX {rel}{i}_idx ON {rel} (x{i})"));
     }
+
     // TODO(lb, high): add delta for semi-naive
     format!(
         r"CREATE SEQUENCE {0}_seq;
@@ -25,8 +25,12 @@ fn create_table(rel: &Rel, arity: usize) -> String {
               id  INTEGER PRIMARY KEY DEFAULT NEXTVAL('{0}_seq'),
               {1}
           );
+          {2}{3}
          ",
-        rel, attrs
+        rel,
+        attrs.join(",\n"),
+        indices.join(";\n"),
+        if indices.is_empty() { "" } else { ";" }
     )
 }
 
