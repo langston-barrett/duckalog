@@ -18,13 +18,15 @@ fn create_table(rel: &Rel, arity: usize) -> String {
         indices.push(format!("CREATE INDEX {rel}{i}_idx ON {rel} (x{i})"));
     }
 
-    // TODO(lb, high): add delta for semi-naive
+    // `it` is the iteration number, for semi-naive evaluation
     format!(
         r"CREATE SEQUENCE {0}_seq;
           CREATE TABLE {0} (
               id  INTEGER PRIMARY KEY DEFAULT NEXTVAL('{0}_seq'),
+              it  INTEGER,
               {1}
           );
+          CREATE INDEX {0}_delta_idx ON {0} (it);
           {2}{3}
          ",
         rel,
@@ -69,7 +71,7 @@ fn exists(conn: &Connection, rel: &Rel, consts: &Vec<Const>) -> Result<bool> {
 
 // TODO(lb, low): Group facts by relation, use Appender
 fn insert_fact(conn: &Connection, rel: &Rel, consts: &Vec<Const>) -> Result<()> {
-    let mut q = format!(r"INSERT INTO {0} VALUES (nextval('{0}_seq')", rel);
+    let mut q = format!(r"INSERT INTO {0} VALUES (nextval('{0}_seq'), 0", rel);
     for _ in consts {
         q += ", ?";
     }
@@ -90,104 +92,121 @@ fn insert_fact_if_not_exists(conn: &Connection, rel: &Rel, consts: &Vec<Const>) 
 
 /// Non-recursive Datalog is equivalent to unions of conjunctive queries :-)
 ///
+/// `it` is the current iteration number, for semi-naive evaluation.
+///
 /// See also https://github.com/philzook58/duckegg/blob/e6c9fc106098e837095c461521c451c18e53c091/duckegg.py#L101
-fn eval_rule_query(rule: &Rule) -> String {
+fn eval_rule_query(rule: &Rule, it: usize) -> Vec<String> {
     let rel = &rule.head.rel;
-
-    // For each relation in the body, select from that relation's table
-    let mut tables: Vec<String> = Vec::new();
-    let mut bindings: HashMap<Term, Vec<String>> = HashMap::default();
-    for (i, atom) in rule.body.iter().enumerate() {
-        let table = format!("{}{i}", atom.rel);
-        tables.push(format!("{} AS {table}", atom.rel));
-        for (field, term) in atom.terms.iter().enumerate() {
-            bindings
-                .entry(term.clone())
-                .or_insert_with(|| Vec::with_capacity(1))
-                .push(format!("{table}.x{field}"))
+    let mut rules = Vec::new();
+    for delta in 0..rule.body.len() {
+        // For each relation in the body, select from that relation's table
+        let mut tables: Vec<String> = Vec::new();
+        let mut bindings: HashMap<Term, Vec<String>> = HashMap::default();
+        let mut delta_cond = String::new();
+        for (i, atom) in rule.body.iter().enumerate() {
+            // TODO: Make the SQL a bit clearer:
+            // if i == delta {
+            //     let table = format!("delta_{}{i}", atom.rel);
+            // } else {
+            //     let table = format!("{}{i}", atom.rel);
+            // }
+            let table = format!("{}{i}", atom.rel);
+            tables.push(format!("{} AS {table}", atom.rel));
+            for (field, term) in atom.terms.iter().enumerate() {
+                bindings
+                    .entry(term.clone())
+                    .or_insert_with(|| Vec::with_capacity(1))
+                    .push(format!("{table}.x{field}"))
+            }
+            // Semi-naive: only use the facts from the previous generation
+            if i == delta && it > 0 {
+                delta_cond = format!("{table}.it = {}", it - 1);
+            }
         }
-    }
 
-    // Project out the variables that are needed by the head
-    let mut selects = Vec::new();
-    for term in &rule.head.terms {
-        selects.push(match term {
-            Term::Const(c) => format!("'{}'", c),
-            // Any of the bindings will do, they're all asserted equal in WHERE
-            v @ Term::Var(_) => bindings
-                .get(v)
-                .expect("Range restriction violation!")
-                .get(0)
-                .unwrap()
-                .clone(),
-        })
-    }
-
-    // Let SQL do the unification by building WHERE clauses that equate the
-    // different SQL names of the same Datalog variable
-    let mut unifications = Vec::new();
-    for binds in bindings.values() {
-        let mut iter = binds.iter();
-        let first = iter.next().unwrap();
-        for bind in iter {
-            unifications.push(format!("{first} = {bind}"));
+        // Project out the variables that are needed by the head
+        let mut selects = Vec::new();
+        for term in &rule.head.terms {
+            selects.push(match term {
+                Term::Const(c) => format!("'{}'", c),
+                // Any of the bindings will do, they're all asserted equal in WHERE
+                v @ Term::Var(_) => bindings
+                    .get(v)
+                    .expect("Range restriction violation!")
+                    .get(0)
+                    .unwrap()
+                    .clone(),
+            })
         }
-    }
-    let unification_conds = if unifications.is_empty() {
-        String::from("true")
-    } else {
-        unifications.join(" AND ")
-    };
 
-    // Ensure the entry doesn't already exist (set semantics)
-    let mut eqs = Vec::new();
-    for (i, col) in selects.iter().enumerate() {
-        eqs.push(format!("pre.x{i} = {col}"));
-    }
-    let mut not_exists = format!("SELECT * from {} AS pre", rel);
-    if !eqs.is_empty() {
-        not_exists += " WHERE ";
-        not_exists += &eqs.join(" AND ");
-    }
-
-    // Assign each selected column of the subquery a name
-    let mut selects_as = Vec::with_capacity(selects.len());
-    for (i, sel) in selects.into_iter().enumerate() {
-        selects_as.push(format!("{sel} AS y{i}"));
-    }
-    if selects_as.is_empty() {
-        selects_as.push(String::from("*"));
-    }
-
-    let subquery = format!(
-        "SELECT DISTINCT {} FROM {} WHERE {} AND NOT EXISTS ({})",
-        selects_as.join(", "),
-        tables.join(","),
-        unification_conds,
-        not_exists,
-    );
-
-    // Select out the necessary columns from the subquery
-    let mut selected = Vec::with_capacity(selects_as.len());
-    let n_selected = if selects_as[0] == "*" {
-        0
-    } else {
-        selects_as.len()
-    };
-    for i in 0..n_selected {
-        selected.push(format!("y{i}"));
-    }
-
-    format!(
-        r"INSERT INTO {0} SELECT nextval('{0}_seq'){1} FROM ({2})",
-        rel,
-        if selected.is_empty() {
-            String::from("")
+        // Let SQL do the unification by building WHERE clauses that equate the
+        // different SQL names of the same Datalog variable
+        let mut unifications = Vec::new();
+        for binds in bindings.values() {
+            let mut iter = binds.iter();
+            let first = iter.next().unwrap();
+            for bind in iter {
+                unifications.push(format!("{first} = {bind}"));
+            }
+        }
+        let unification_conds = if unifications.is_empty() {
+            String::from("true")
         } else {
-            format!(", {}", selected.join(", "))
-        },
-        subquery
-    )
+            unifications.join(" AND ")
+        };
+
+        // Ensure the entry doesn't already exist (set semantics)
+        let mut eqs = Vec::new();
+        for (i, col) in selects.iter().enumerate() {
+            eqs.push(format!("pre.x{i} = {col}"));
+        }
+        let mut not_exists = format!("SELECT * from {} AS pre", rel);
+        if !eqs.is_empty() {
+            not_exists += " WHERE ";
+            not_exists += &eqs.join(" AND ");
+        }
+
+        // Assign each selected column of the subquery a name
+        let mut selects_as = Vec::with_capacity(selects.len());
+        for (i, sel) in selects.into_iter().enumerate() {
+            selects_as.push(format!("{sel} AS y{i}"));
+        }
+        if selects_as.is_empty() {
+            selects_as.push(String::from("*"));
+        }
+
+        let subquery = format!(
+            "SELECT DISTINCT {} FROM {} WHERE {} AND {} AND NOT EXISTS ({})",
+            selects_as.join(", "),
+            tables.join(","),
+            delta_cond,
+            unification_conds,
+            not_exists,
+        );
+
+        // Select out the necessary columns from the subquery
+        let mut selected = Vec::with_capacity(selects_as.len());
+        let n_selected = if selects_as[0] == "*" {
+            0
+        } else {
+            selects_as.len()
+        };
+        for i in 0..n_selected {
+            selected.push(format!("y{i}"));
+        }
+
+        rules.push(format!(
+            r"INSERT INTO {0} SELECT nextval('{0}_seq'), {it}{1} FROM ({2})",
+            rel,
+            if selected.is_empty() {
+                String::from("")
+            } else {
+                format!(", {}", selected.join(", "))
+            },
+            subquery
+        ));
+    }
+    rules
 }
 
 fn insert_facts(conn: &Connection, prog: &Mir) -> Result<()> {
@@ -220,19 +239,19 @@ impl Eval {
 
     pub fn go(&self) -> Result<usize> {
         let mut iters = 0;
-
-        // Build the conjunctive query for each rule
-        let mut rule_queries = Vec::with_capacity(self.prog.rules().count());
-        for rule in self.prog.rules() {
-            rule_queries.push(eval_rule_query(rule));
-        }
-
         // Execute the queries until fixpoint
         loop {
             iters += 1;
+            // Build the conjunctive query for each rule
+            let mut rule_queries = Vec::with_capacity(self.prog.rules().count());
+            for rule in self.prog.rules() {
+                rule_queries.extend(eval_rule_query(rule, iters));
+            }
+
             let mut changed = false;
             self.conn.execute_batch("BEGIN;")?;
             for q in &rule_queries {
+                println!("{}", q);
                 let n_changed = self.conn.execute(q, [])?;
                 changed |= n_changed > 0;
             }
@@ -268,7 +287,8 @@ impl Eval {
             while let Some(row) = entries.next()? {
                 let mut fact = Vec::with_capacity(arity);
                 for i in 0..arity {
-                    fact.push(Const::new(row.get_unwrap(i + 1)).unwrap());
+                    // + 2 for id, it
+                    fact.push(Const::new(row.get_unwrap(i + 2)).unwrap());
                 }
                 m.get_mut(&rel).unwrap().insert(fact);
             }
