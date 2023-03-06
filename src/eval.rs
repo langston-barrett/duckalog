@@ -1,11 +1,12 @@
 use duckdb::{Connection, Result};
 
-use crate::ast::{GroundAtom, Program, Rel};
+use crate::ast::{Const, Rel};
+use crate::mir::Mir;
 
 #[derive(Debug)]
 pub struct Eval {
     conn: Connection,
-    prog: Program,
+    prog: Mir,
 }
 
 fn create_table(rel: &Rel, arity: usize) -> String {
@@ -28,7 +29,7 @@ fn create_table(rel: &Rel, arity: usize) -> String {
     )
 }
 
-fn create_tables(conn: &Connection, prog: &Program) -> Result<()> {
+fn create_tables(conn: &Connection, prog: &Mir) -> Result<()> {
     conn.execute_batch("BEGIN;")?;
     for (rel, arity) in prog.arities() {
         let stmt = create_table(&rel, arity);
@@ -38,12 +39,12 @@ fn create_tables(conn: &Connection, prog: &Program) -> Result<()> {
     Ok(())
 }
 
-fn exists(conn: &Connection, fact: &GroundAtom) -> Result<bool> {
-    let mut q = format!("SELECT COUNT(*) from {}", fact.rel);
-    if !fact.terms.is_empty() {
+fn exists(conn: &Connection, rel: &Rel, consts: &Vec<Const>) -> Result<bool> {
+    let mut q = format!("SELECT COUNT(*) from {}", rel);
+    if !consts.is_empty() {
         q += " WHERE ";
-        for (i, term) in fact.terms.iter().enumerate() {
-            q += &format!("{}.x{} = '{}'", fact.rel, i, term);
+        for (i, c) in consts.iter().enumerate() {
+            q += &format!("{}.x{} = '{}'", rel, i, c);
         }
     }
     q += ";";
@@ -59,37 +60,32 @@ fn exists(conn: &Connection, fact: &GroundAtom) -> Result<bool> {
 }
 
 // TODO(lb, low): Group facts by relation, use Appender
-fn insert_fact(conn: &Connection, fact: &GroundAtom) -> Result<()> {
-    let mut q = format!(r"INSERT INTO {0} VALUES (nextval('{0}_seq')", fact.rel);
-    for _ in &fact.terms {
+fn insert_fact(conn: &Connection, rel: &Rel, consts: &Vec<Const>) -> Result<()> {
+    let mut q = format!(r"INSERT INTO {0} VALUES (nextval('{0}_seq')", rel);
+    for _ in consts {
         q += ", ?";
     }
     q += ");";
 
     let mut stmt = conn.prepare_cached(&q)?;
-    stmt.execute(duckdb::params_from_iter(&fact.terms))?;
+    stmt.execute(duckdb::params_from_iter(consts))?;
     conn.flush_prepared_statement_cache();
     Ok(())
 }
 
-fn insert_fact_if_not_exists(conn: &Connection, fact: &GroundAtom) -> Result<()> {
-    if exists(conn, fact)? {
+fn insert_fact_if_not_exists(conn: &Connection, rel: &Rel, consts: &Vec<Const>) -> Result<()> {
+    if exists(conn, rel, consts)? {
         return Ok(());
     }
-    insert_fact(conn, fact)
+    insert_fact(conn, rel, consts)
 }
 
-fn insert_facts(conn: &Connection, prog: &Program) -> Result<()> {
+fn insert_facts(conn: &Connection, prog: &Mir) -> Result<()> {
     conn.execute_batch("BEGIN;")?;
     conn.set_prepared_statement_cache_capacity(512); // just a guess
-    for rule in &prog.rules {
-        if rule.is_fact() {
-            let ground = rule
-                .head
-                .clone()
-                .ground()
-                .expect("Range restriction violation!");
-            insert_fact_if_not_exists(conn, &ground)?;
+    for (rel, facts) in prog.facts() {
+        for fact in facts {
+            insert_fact_if_not_exists(conn, rel, fact)?;
         }
     }
     conn.execute_batch("COMMIT;")?;
@@ -97,24 +93,33 @@ fn insert_facts(conn: &Connection, prog: &Program) -> Result<()> {
 }
 
 impl Eval {
-    pub fn new(conn: Connection, prog: Program) -> Result<Self> {
+    pub fn new(conn: Connection, prog: Mir) -> Result<Self> {
         create_tables(&conn, &prog)?;
         insert_facts(&conn, &prog)?;
         Ok(Self { conn, prog })
+    }
+
+    pub fn go(&self) -> Result<usize> {
+        let iters = 1;
+        for _rule in self.prog.rules() {
+            // TODO
+        }
+        Ok(iters)
     }
 
     pub fn into_connection(self) -> Connection {
         self.conn
     }
 
-    pub fn into_program(self) -> Program {
+    pub fn into_program(self) -> Mir {
         self.prog
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{Atom, Const, Rel, Rule, Term};
+    use crate::ast::{Ast, Atom, Const, Rel, Rule, Term};
+    use crate::mir::Mir;
 
     use super::*;
 
@@ -129,7 +134,7 @@ mod tests {
     fn unary_atom() -> Atom {
         Atom::new(
             Rel::new(String::from("r")),
-            vec![Term::Const(Const::new(String::from("c")))],
+            vec![Term::Const(Const::new_unchecked(String::from("c")))],
         )
     }
 
@@ -139,21 +144,21 @@ mod tests {
 
     #[test]
     fn test_nullary_init() {
-        let prog = Program::new(vec![null_fact()]).unwrap();
+        let prog = Mir::new(Ast::new(vec![null_fact()]).unwrap()).unwrap();
         let conn = Connection::open_in_memory().unwrap();
         Eval::new(conn, prog).unwrap();
     }
 
     #[test]
     fn test_unary_init() {
-        let prog = Program::new(vec![unary_fact()]).unwrap();
+        let prog = Mir::new(Ast::new(vec![unary_fact()]).unwrap()).unwrap();
         let conn = Connection::open_in_memory().unwrap();
         Eval::new(conn, prog).unwrap();
     }
 
     #[test]
     fn test_same_fact() {
-        let prog = Program::new(vec![null_fact(), null_fact()]).unwrap();
+        let prog = Mir::new(Ast::new(vec![null_fact(), null_fact()]).unwrap()).unwrap();
         let conn = Connection::open_in_memory().unwrap();
         let eval = Eval::new(conn, prog).unwrap();
         let conn = eval.into_connection();

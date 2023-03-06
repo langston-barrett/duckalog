@@ -31,10 +31,24 @@ impl duckdb::ToSql for Const {
     }
 }
 
-// TODO(lb): check for lowercase
 impl Const {
-    pub fn new(s: String) -> Self {
+    pub fn new(s: String) -> Option<Self> {
+        if Self::valid(&s) {
+            Some(Self(s))
+        } else {
+            None
+        }
+    }
+
+    pub fn new_unchecked(s: String) -> Self {
         Self(s)
+    }
+
+    pub fn valid(s: &str) -> bool {
+        match s.chars().next() {
+            None => false,
+            Some(c) => c.is_lowercase(),
+        }
     }
 }
 
@@ -51,8 +65,23 @@ impl Display for Var {
 }
 
 impl Var {
-    pub fn new(s: String) -> Self {
+    pub fn new(s: String) -> Option<Self> {
+        if Self::valid(&s) {
+            Some(Self(s))
+        } else {
+            None
+        }
+    }
+
+    pub fn new_unchecked(s: String) -> Self {
         Self(s)
+    }
+
+    pub fn valid(s: &str) -> bool {
+        match s.chars().next() {
+            None => false,
+            Some(c) => c.is_uppercase(),
+        }
     }
 }
 
@@ -170,12 +199,12 @@ impl Rule {
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Program {
+pub struct Ast {
     pub(crate) rules: Vec<Rule>,
 }
 
 struct Atoms<'a> {
-    prog: &'a Program,
+    prog: &'a Ast,
     rule: usize,
     atom: usize,
 }
@@ -208,7 +237,7 @@ impl<'a> Iterator for Atoms<'a> {
     }
 }
 
-impl Program {
+impl Ast {
     pub fn atoms(&self) -> impl Iterator<Item = &Atom> {
         Atoms {
             prog: self,
@@ -225,7 +254,7 @@ impl Program {
                     arities.insert(atom.rel.clone(), atom.terms.len());
                 }
                 Some(arity) => {
-                    debug_assert!(arity == atom.terms.len())
+                    debug_assert_eq!(arity, atom.terms.len())
                 }
             }
         }
@@ -233,7 +262,17 @@ impl Program {
     }
 
     pub fn new(rules: Vec<Rule>) -> Result<Self, Error> {
-        let mut arities = HashMap::with_capacity(rules.len() / 8); // just a guess
+        let prog = Self { rules };
+        prog.valid()?;
+        Ok(prog)
+    }
+
+    pub fn new_unchecked(rules: Vec<Rule>) -> Self {
+        Self { rules }
+    }
+
+    pub fn valid(&self) -> Result<(), Error> {
+        let mut arities = HashMap::with_capacity(self.rules.len() / 8); // just a guess
         let mut check = |atom: &Atom| match arities.get(&atom.rel).copied() {
             None => {
                 arities.insert(atom.rel.clone(), atom.terms.len());
@@ -251,11 +290,10 @@ impl Program {
                 }
             }
         };
-        let prog = Program { rules };
-        for atom in prog.atoms() {
+        for atom in self.atoms() {
             check(atom)?;
         }
-        Ok(prog)
+        Ok(())
     }
 }
 
@@ -274,7 +312,7 @@ mod tests {
     fn unary_atom() -> Atom {
         Atom::new(
             Rel::new(String::from("r")),
-            vec![Term::Const(Const::new(String::from("c")))],
+            vec![Term::Const(Const::new_unchecked(String::from("c")))],
         )
     }
 
@@ -294,9 +332,9 @@ mod tests {
 
     #[test]
     fn nullary_prog_ok() {
-        let prog = Program::new(vec![null_fact()]).unwrap();
+        let prog = Ast::new(vec![null_fact()]).unwrap();
         assert_eq!(
-            Program {
+            Ast {
                 rules: vec![null_fact()]
             },
             prog
@@ -306,9 +344,9 @@ mod tests {
 
     #[test]
     fn unary_prog_ok() {
-        let prog = Program::new(vec![unary_fact()]).unwrap();
+        let prog = Ast::new(vec![unary_fact()]).unwrap();
         assert_eq!(
-            Program {
+            Ast {
                 rules: vec![unary_fact()]
             },
             prog
