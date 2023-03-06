@@ -2,6 +2,7 @@
 
 set -e
 
+rm -f edge.csv
 max="${2:-20000}"
 for _ in $(seq 0 "${1:-10000}"); do
   printf "%s,%s\n" n$((RANDOM % max)) n$((RANDOM % max)) >> "edge.csv"
