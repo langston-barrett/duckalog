@@ -5,29 +5,38 @@ use duckdb::{Connection, Result};
 
 use crate::ast::Program;
 
-pub fn init(conn: &Connection, prog: &Program) -> Result<()> {
-    for (rel, arity) in prog.arities() {
-        let mut attrs = String::new();
-        for i in 0..arity {
-            attrs += &format!("x{i}  TEXT NOT NULL");
-            if i + 1 != arity {
-                attrs += ",\n";
+#[derive(Debug)]
+pub struct Eval {
+    // TODO: rm pub
+    pub conn: Connection,
+    pub prog: Program,
+}
+
+impl Eval {
+    pub fn new(conn: Connection, prog: Program) -> Result<Self> {
+        for (rel, arity) in prog.arities() {
+            let mut attrs = String::new();
+            for i in 0..arity {
+                attrs += &format!("x{i}  TEXT NOT NULL");
+                if i + 1 != arity {
+                    attrs += ",\n";
+                }
             }
-        }
-        // TODO: delta
-        let stmt = format!(
-            r"CREATE SEQUENCE {0}_seq;
+            // TODO: delta
+            let stmt = format!(
+                r"CREATE SEQUENCE {0}_seq;
               CREATE TABLE {0} (
                   id  INTEGER PRIMARY KEY DEFAULT NEXTVAL('seq'),
                   {1}
               );
              ",
-            rel, attrs
-        );
-        eprintln!("{}", stmt);
-        conn.execute_batch(&stmt)?;
+                rel, attrs
+            );
+            eprintln!("{}", stmt);
+            conn.execute_batch(&stmt)?;
+        }
+        Ok(Self { conn, prog })
     }
-    Ok(())
 }
 
 // fn main() -> Result<()> {
@@ -99,13 +108,13 @@ mod tests {
     fn test_nullary_init() {
         let prog = Program::new(vec![null_fact()]).unwrap();
         let conn = Connection::open_in_memory().unwrap();
-        init(&conn, &prog).unwrap();
+        Eval::new(conn, prog).unwrap();
     }
 
     #[test]
     fn test_unary_init() {
         let prog = Program::new(vec![unary_fact()]).unwrap();
         let conn = Connection::open_in_memory().unwrap();
-        init(&conn, &prog).unwrap();
+        Eval::new(conn, prog).unwrap();
     }
 }
