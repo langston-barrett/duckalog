@@ -145,24 +145,41 @@ fn eval_rule_query(rule: &Rule) -> String {
         not_exists += &eqs.join(" AND ");
     }
 
-    if selects.is_empty() {
-        selects.push(String::from("*"));
+    // Assign each selected column of the subquery a name
+    let mut selects_as = Vec::with_capacity(selects.len());
+    for (i, sel) in selects.into_iter().enumerate() {
+        selects_as.push(format!("{sel} AS y{i}"));
     }
+    if selects_as.is_empty() {
+        selects_as.push(String::from("*"));
+    }
+
     let subquery = format!(
         "SELECT DISTINCT {} FROM {} WHERE {} AND NOT EXISTS ({})",
-        selects.join(", "),
+        selects_as.join(", "),
         tables.join(","),
         unification_conds,
         not_exists,
     );
 
+    // Select out the necessary columns from the subquery
+    let mut selected = Vec::with_capacity(selects_as.len());
+    let n_selected = if selects_as[0] == "*" {
+        0
+    } else {
+        selects_as.len()
+    };
+    for i in 0..n_selected {
+        selected.push(format!("y{i}"));
+    }
+
     format!(
-        r"INSERT INTO {0} SELECT {1} FROM ({2})",
+        r"INSERT INTO {0} SELECT nextval('{0}_seq'){1} FROM ({2})",
         rel,
-        if selects.is_empty() || &selects[0] == "*" {
-            format!("nextval('{}_seq')", rel)
+        if selected.is_empty() {
+            String::from("")
         } else {
-            format!("nextval('{}_seq'), {}", rel, selects.join(", "))
+            format!(", {}", selected.join(", "))
         },
         subquery
     )
