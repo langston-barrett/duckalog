@@ -3,7 +3,7 @@
 // use duckdb::{params, Connection, Result};
 use duckdb::{Connection, Result};
 
-use crate::ast::Program;
+use crate::ast::{Atom, Program, Rel};
 
 #[derive(Debug)]
 pub struct Eval {
@@ -12,29 +12,63 @@ pub struct Eval {
     pub prog: Program,
 }
 
+fn create_table(rel: &Rel, arity: usize) -> String {
+    let mut attrs = String::new();
+    for i in 0..arity {
+        attrs += &format!("x{i}  TEXT NOT NULL");
+        if i + 1 != arity {
+            attrs += ",\n";
+        }
+    }
+    // TODO: delta
+    format!(
+        r"CREATE SEQUENCE {0}_seq;
+          CREATE TABLE {0} (
+              id  INTEGER PRIMARY KEY DEFAULT NEXTVAL('{0}_seq'),
+              {1}
+          );
+         ",
+        rel, attrs
+    )
+}
+
+fn create_tables(conn: &Connection, prog: &Program) -> Result<()> {
+    conn.execute_batch("BEGIN;")?;
+    for (rel, arity) in prog.arities() {
+        let stmt = create_table(&rel, arity);
+        conn.execute_batch(&stmt)?;
+    }
+    conn.execute_batch("COMMIT;")?;
+    Ok(())
+}
+
+fn insert_fact(_conn: &Connection, _fact: &Atom) -> Result<()> {
+    // TODO
+    // let mut _stmt = conn.prepare_cached(&format!(r"INSERT INTO {} VALUES (0, ?)", fact.rel))?;
+    // match &fact.terms[0] {
+    //     crate::Term::Var(_) => panic!("Range restriction violation!"),
+    //     crate::Term::Const(c) => {
+    //         stmt.execute([c])?;
+    //     }
+    // }
+    Ok(())
+}
+
+fn insert_facts(conn: &Connection, prog: &Program) -> Result<()> {
+    conn.execute_batch("BEGIN;")?;
+    for rule in &prog.rules {
+        if rule.is_fact() {
+            insert_fact(conn, &rule.head)?;
+        }
+    }
+    conn.execute_batch("COMMIT;")?;
+    Ok(())
+}
+
 impl Eval {
     pub fn new(conn: Connection, prog: Program) -> Result<Self> {
-        for (rel, arity) in prog.arities() {
-            let mut attrs = String::new();
-            for i in 0..arity {
-                attrs += &format!("x{i}  TEXT NOT NULL");
-                if i + 1 != arity {
-                    attrs += ",\n";
-                }
-            }
-            // TODO: delta
-            let stmt = format!(
-                r"CREATE SEQUENCE {0}_seq;
-              CREATE TABLE {0} (
-                  id  INTEGER PRIMARY KEY DEFAULT NEXTVAL('seq'),
-                  {1}
-              );
-             ",
-                rel, attrs
-            );
-            eprintln!("{}", stmt);
-            conn.execute_batch(&stmt)?;
-        }
+        create_tables(&conn, &prog)?;
+        insert_facts(&conn, &prog)?;
         Ok(Self { conn, prog })
     }
 }

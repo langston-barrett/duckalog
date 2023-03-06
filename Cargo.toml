@@ -11,7 +11,7 @@ homepage = "https://github.com/langston-barrett/duckalog"
 repository = "https://github.com/langston-barrett/duckalog"
 
 [dependencies]
-duckdb = "0.7"
+duckdb = { features = ["bundled"], version = "0.7" }
 thiserror = "1"
 
 [profile.dev]

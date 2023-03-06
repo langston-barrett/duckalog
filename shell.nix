@@ -4,7 +4,7 @@
 
 pkgs.mkShell {
   nativeBuildInputs = [
-    pkgs.duckdb
+    unstable.duckdb
     pkgs.rust-analyzer
     pkgs.rustup
   ];

@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 
+use duckdb::types::{ToSqlOutput, ValueRef};
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, thiserror::Error)]
 pub enum Error {
     #[error("relation `{relation}` used with multiple arities: `{arity1}`, `{arity2}`")]
@@ -20,6 +22,12 @@ pub struct Const(String);
 impl Display for Const {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl duckdb::ToSql for Const {
+    fn to_sql(&self) -> duckdb::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Borrowed(ValueRef::Text(self.0.as_bytes())))
     }
 }
 
@@ -82,8 +90,8 @@ impl Rel {
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Atom {
-    rel: Rel,
-    terms: Vec<Term>, // TODO(lb, low): small vec optimization
+    pub(crate) rel: Rel,
+    pub(crate) terms: Vec<Term>, // TODO(lb, low): small vec optimization
 }
 
 impl Display for Atom {
@@ -108,8 +116,8 @@ impl Atom {
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Rule {
-    head: Atom,
-    body: Vec<Atom>, // TODO(lb, low): small vec optimization
+    pub(crate) head: Atom,
+    pub(crate) body: Vec<Atom>, // TODO(lb, low): small vec optimization
 }
 
 impl Display for Rule {
@@ -131,11 +139,15 @@ impl Rule {
     pub fn new(head: Atom, body: Vec<Atom>) -> Self {
         Self { head, body }
     }
+
+    pub fn is_fact(&self) -> bool {
+        self.body.is_empty()
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Program {
-    rules: Vec<Rule>,
+    pub(crate) rules: Vec<Rule>,
 }
 
 struct Atoms<'a> {
