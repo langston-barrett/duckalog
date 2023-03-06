@@ -229,7 +229,7 @@ impl Eval {
             let mut changed = false;
             self.conn.execute_batch("BEGIN;")?;
             for q in &rule_queries {
-                let n_changed = self.conn.execute(&q, [])?;
+                let n_changed = self.conn.execute(q, [])?;
                 changed |= n_changed > 0;
             }
             self.conn.execute_batch("END;")?;
