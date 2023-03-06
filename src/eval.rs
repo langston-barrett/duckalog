@@ -52,7 +52,6 @@ fn exists(conn: &Connection, rel: &Rel, consts: &Vec<Const>) -> Result<bool> {
         }
     }
     q += ";";
-    eprintln!("{}", q);
 
     let mut entries = conn.prepare_cached(&q).unwrap();
     let n: usize = entries
@@ -137,7 +136,7 @@ fn eval_rule_query(rule: &Rule) -> String {
     // Ensure the entry doesn't already exist (set semantics)
     let mut eqs = Vec::new();
     for (i, col) in selects.iter().enumerate() {
-        eqs.push(format!("pre.{i} = {col}"));
+        eqs.push(format!("pre.x{i} = {col}"));
     }
     let mut not_exists = format!("SELECT * from {} AS pre", rel);
     if !eqs.is_empty() {
@@ -188,7 +187,6 @@ fn eval_rule_query(rule: &Rule) -> String {
 /// See also https://github.com/philzook58/duckegg/blob/e6c9fc106098e837095c461521c451c18e53c091/duckegg.py#L101
 fn eval_rule(conn: &Connection, rule: &Rule) -> Result<bool> {
     let q = eval_rule_query(rule);
-    eprintln!("{}", q);
     let changed = conn.execute(&q, [])?;
     Ok(changed > 0)
 }
