@@ -1,6 +1,3 @@
-// use duckdb::arrow::record_batch::RecordBatch;
-// use duckdb::arrow::util::pretty::print_batches;
-// use duckdb::{params, Connection, Result};
 use duckdb::{Connection, Result};
 
 use crate::ast::{Atom, Program, Rel};
@@ -42,20 +39,30 @@ fn create_tables(conn: &Connection, prog: &Program) -> Result<()> {
     Ok(())
 }
 
-fn insert_fact(_conn: &Connection, _fact: &Atom) -> Result<()> {
-    // TODO
-    // let mut _stmt = conn.prepare_cached(&format!(r"INSERT INTO {} VALUES (0, ?)", fact.rel))?;
-    // match &fact.terms[0] {
-    //     crate::Term::Var(_) => panic!("Range restriction violation!"),
-    //     crate::Term::Const(c) => {
-    //         stmt.execute([c])?;
-    //     }
-    // }
+fn insert_fact(conn: &Connection, fact: &Atom) -> Result<()> {
+    let mut q = format!(r"INSERT INTO {0} VALUES (nextval('{0}_seq')", fact.rel);
+    for _ in &fact.terms {
+        q += ", ?";
+    }
+    q += ");";
+    let mut stmt = conn.prepare_cached(&q)?;
+    let mut values = Vec::with_capacity(fact.terms.len());
+    for t in &fact.terms {
+        match t {
+            crate::Term::Var(_) => panic!("Range restriction violation!"),
+            crate::Term::Const(c) => {
+                values.push(c);
+            }
+        }
+    }
+    stmt.execute(duckdb::params_from_iter(values))?;
+    conn.flush_prepared_statement_cache();
     Ok(())
 }
 
 fn insert_facts(conn: &Connection, prog: &Program) -> Result<()> {
     conn.execute_batch("BEGIN;")?;
+    conn.set_prepared_statement_cache_capacity(512); // just a guess
     for rule in &prog.rules {
         if rule.is_fact() {
             insert_fact(conn, &rule.head)?;
