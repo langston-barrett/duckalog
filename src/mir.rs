@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use fxhash::{FxBuildHasher, FxHashMap as HashMap, FxHashSet as HashSet};
 
 use crate::ast::{Ast, Const, Rel, Rule};
 
@@ -26,7 +26,10 @@ pub struct Mir {
 
 impl Mir {
     pub fn arities(&self) -> HashMap<Rel, usize> {
-        let mut arities = HashMap::with_capacity(self.facts.len()); // lower bound
+        let mut arities = HashMap::with_capacity_and_hasher(
+            self.facts.len(), // lower bound
+            FxBuildHasher::default(),
+        );
         for (rel, consts) in &self.facts {
             arities.insert(rel.clone(), consts.iter().next().unwrap().len());
         }
@@ -60,8 +63,10 @@ impl Mir {
     }
 
     pub fn new_unchecked(ast: Ast) -> Result<Self, Error> {
-        let mut facts = HashMap::with_capacity(ast.rules.len());
-        let mut rules = HashSet::with_capacity(ast.rules.len());
+        let mut facts =
+            HashMap::with_capacity_and_hasher(ast.rules.len(), FxBuildHasher::default());
+        let mut rules =
+            HashSet::with_capacity_and_hasher(ast.rules.len(), FxBuildHasher::default());
         for rule in ast.rules {
             if rule.is_fact() {
                 let fact = match rule.head.ground() {
@@ -70,7 +75,9 @@ impl Mir {
                 };
                 facts
                     .entry(fact.rel)
-                    .or_insert(HashSet::new())
+                    .or_insert_with(|| {
+                        HashSet::with_capacity_and_hasher(1, FxBuildHasher::default())
+                    })
                     .insert(fact.terms);
             } else {
                 rules.insert(rule);
