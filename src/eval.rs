@@ -239,27 +239,31 @@ impl Eval {
     /// The minimal Herbrand model (after calling [`Eval::go`]).
     pub fn model(&self) -> Result<HashMap<Rel, HashSet<Vec<Const>>>> {
         let mut m = HashMap::default();
-        for (rel, _) in self.prog.facts() {
+        let mut arities = HashMap::default();
+        for (rel, mut facts) in self.prog.facts() {
             m.entry(rel.clone()).or_insert_with(HashSet::default);
+            arities.insert(rel.clone(), facts.next().unwrap().len());
         }
         for rule in self.prog.rules() {
             m.entry(rule.head.rel.clone())
                 .or_insert_with(HashSet::default);
+            arities.insert(rule.head.rel.clone(), rule.head.terms.len());
         }
-        let keys = Vec::from_iter(m.keys());
+        let keys = Vec::from_iter(m.keys().cloned());
         for rel in keys {
-            let mut entries = self
+            let mut q = self
                 .conn
-                .prepare(&format!("SELECT COUNT(*) from {};", rel))
+                .prepare(&format!("SELECT DISTINCT * from {};", rel))
                 .unwrap();
-            let n: usize = entries
-                .query([])
-                .unwrap()
-                .next()
-                .unwrap()
-                .unwrap()
-                .get_unwrap(0);
-            eprintln!("{rel}: {n}");
+            let mut entries = q.query([]).unwrap();
+            let arity = *arities.get(&rel).unwrap();
+            while let Some(row) = entries.next()? {
+                let mut fact = Vec::with_capacity(arity);
+                for i in 0..arity {
+                    fact.push(Const::new(row.get_unwrap(i + 1)).unwrap());
+                }
+                m.get_mut(&rel).unwrap().insert(fact);
+            }
         }
         Ok(m)
     }

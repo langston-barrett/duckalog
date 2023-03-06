@@ -38,5 +38,5 @@ fn main() {
     let conn = Connection::open_in_memory().unwrap();
     let exec = Eval::new(conn, mir).unwrap();
     assert_eq!(2, exec.go().unwrap());
-    let _ = exec.model().unwrap();
+    println!("{:?}", exec.model().unwrap());
 }
