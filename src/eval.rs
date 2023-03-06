@@ -84,7 +84,9 @@ fn insert_fact_if_not_exists(conn: &Connection, rel: &Rel, consts: &Vec<Const>) 
     insert_fact(conn, rel, consts)
 }
 
-// TODO(lb, high): Only build the query once per rule!
+/// Non-recursive Datalog is equivalent to unions of conjunctive queries :-)
+///
+/// See also https://github.com/philzook58/duckegg/blob/e6c9fc106098e837095c461521c451c18e53c091/duckegg.py#L101
 fn eval_rule_query(rule: &Rule) -> String {
     let rel = &rule.head.rel;
 
@@ -184,13 +186,6 @@ fn eval_rule_query(rule: &Rule) -> String {
     )
 }
 
-/// See also https://github.com/philzook58/duckegg/blob/e6c9fc106098e837095c461521c451c18e53c091/duckegg.py#L101
-fn eval_rule(conn: &Connection, rule: &Rule) -> Result<bool> {
-    let q = eval_rule_query(rule);
-    let changed = conn.execute(&q, [])?;
-    Ok(changed > 0)
-}
-
 fn insert_facts(conn: &Connection, prog: &Mir) -> Result<()> {
     conn.execute_batch("BEGIN;")?;
     conn.set_prepared_statement_cache_capacity(512); // just a guess
@@ -221,17 +216,26 @@ impl Eval {
 
     pub fn go(&self) -> Result<usize> {
         let mut iters = 0;
+
+        // Build the conjunctive query for each rule
+        let mut rule_queries = Vec::with_capacity(self.prog.rules().count());
+        for rule in self.prog.rules() {
+            rule_queries.push(eval_rule_query(rule));
+        }
+
+        // Execute the queries until fixpoint
         loop {
-            self.conn.execute_batch("BEGIN;")?;
             iters += 1;
             let mut changed = false;
-            for rule in self.prog.rules() {
-                changed |= eval_rule(&self.conn, rule)?;
+            self.conn.execute_batch("BEGIN;")?;
+            for q in &rule_queries {
+                let n_changed = self.conn.execute(&q, [])?;
+                changed |= n_changed > 0;
             }
+            self.conn.execute_batch("END;")?;
             if !changed {
                 break;
             }
-            self.conn.execute_batch("END;")?;
         }
         Ok(iters)
     }
