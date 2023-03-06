@@ -62,7 +62,6 @@ impl Const {
 
 // ------------------------------------------------------------------
 
-// TODO(lb): check for uppercase
 // TODO(lb, low): small string optimization, or:
 // TODO(lb, low): replace with indices into a hash-cons table
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

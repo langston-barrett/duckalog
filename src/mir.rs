@@ -19,7 +19,6 @@ pub enum Error {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Mir {
     facts: HashMap<Rel, HashSet<Vec<Const>>>,
-    // TODO: Make this a Vec with invariant that its a set
     /// Invariant: Each [`Rule`] has a non-empty body
     rules: HashSet<Rule>,
 }
