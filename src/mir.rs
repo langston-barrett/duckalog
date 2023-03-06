@@ -25,6 +25,13 @@ pub struct Mir {
 }
 
 impl Mir {
+    pub fn add_fact(&mut self, rel: &Rel, consts: Vec<Const>) {
+        self.facts
+            .entry(rel.clone())
+            .or_insert_with(|| HashSet::with_capacity_and_hasher(1, FxBuildHasher::default()))
+            .insert(consts);
+    }
+
     pub fn arities(&self) -> HashMap<Rel, usize> {
         let mut arities = HashMap::with_capacity_and_hasher(
             self.facts.len(), // lower bound

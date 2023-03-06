@@ -45,10 +45,14 @@ fn exists(conn: &Connection, rel: &Rel, consts: &Vec<Const>) -> Result<bool> {
     if !consts.is_empty() {
         q += " WHERE ";
         for (i, c) in consts.iter().enumerate() {
+            if i != 0 {
+                q += " AND ";
+            }
             q += &format!("{}.x{} = '{}'", rel, i, c);
         }
     }
     q += ";";
+    eprintln!("{}", q);
 
     let mut entries = conn.prepare_cached(&q).unwrap();
     let n: usize = entries
@@ -114,8 +118,21 @@ fn eval_rule_query(rule: &Rule) -> String {
         })
     }
 
-    // Let SQL do the unification by building WHERE clauses
-    // let mut conds = Vec::new();
+    // Let SQL do the unification by building WHERE clauses that equate the
+    // different SQL names of the same Datalog variable
+    let mut unifications = Vec::new();
+    for binds in bindings.values() {
+        let mut iter = binds.iter();
+        let first = iter.next().unwrap();
+        for bind in iter {
+            unifications.push(format!("{first} = {bind}"));
+        }
+    }
+    let unification_conds = if unifications.is_empty() {
+        String::from("true")
+    } else {
+        unifications.join(" AND ")
+    };
 
     // Ensure the entry doesn't already exist (set semantics)
     let mut eqs = Vec::new();
@@ -135,7 +152,7 @@ fn eval_rule_query(rule: &Rule) -> String {
         "SELECT DISTINCT {} FROM {} WHERE {} AND NOT EXISTS ({})",
         selects.join(", "),
         tables.join(","),
-        "true", // conds.join(" AND ")
+        unification_conds,
         not_exists,
     );
 
