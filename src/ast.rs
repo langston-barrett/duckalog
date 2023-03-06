@@ -112,6 +112,30 @@ impl Atom {
     pub fn new(rel: Rel, terms: Vec<Term>) -> Self {
         Self { rel, terms }
     }
+
+    pub fn ground(self) -> Option<GroundAtom> {
+        let mut consts = Vec::with_capacity(self.terms.len());
+        for term in self.terms {
+            if let Term::Const(c) = term {
+                consts.push(c);
+            } else {
+                return None;
+            }
+        }
+        Some(GroundAtom::new(self.rel, consts))
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GroundAtom {
+    pub(crate) rel: Rel,
+    pub(crate) terms: Vec<Const>, // TODO(lb, low): small vec optimization
+}
+
+impl GroundAtom {
+    pub fn new(rel: Rel, terms: Vec<Const>) -> Self {
+        Self { rel, terms }
+    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

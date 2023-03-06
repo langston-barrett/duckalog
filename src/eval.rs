@@ -38,6 +38,12 @@ fn create_tables(conn: &Connection, prog: &Program) -> Result<()> {
     Ok(())
 }
 
+// fn exists(fact: &Atom) -> Result<bool> {
+//     let mut entries = conn
+//         .prepare_cached(&format!("SELECT COUNT(*) from {} WHERE;", fact.rel))
+//         .unwrap();
+// }
+
 // TODO(lb, high): Handle duplicate facts
 // TODO(lb, low): Group facts by relation, use Appender
 fn insert_fact(conn: &Connection, fact: &Atom) -> Result<()> {
@@ -47,16 +53,8 @@ fn insert_fact(conn: &Connection, fact: &Atom) -> Result<()> {
     }
     q += ");";
     let mut stmt = conn.prepare_cached(&q)?;
-    let mut values = Vec::with_capacity(fact.terms.len());
-    for t in &fact.terms {
-        match t {
-            crate::Term::Var(_) => panic!("Range restriction violation!"),
-            crate::Term::Const(c) => {
-                values.push(c);
-            }
-        }
-    }
-    stmt.execute(duckdb::params_from_iter(values))?;
+    let ground = fact.clone().ground().expect("Range restriction violation!");
+    stmt.execute(duckdb::params_from_iter(ground.terms))?;
     conn.flush_prepared_statement_cache();
     Ok(())
 }
