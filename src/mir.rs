@@ -15,6 +15,7 @@ pub enum Error {
     Ungrounded,
 }
 
+/// Mid-level IR.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Mir {
     facts: HashMap<Rel, HashSet<Vec<Const>>>,
@@ -42,6 +43,10 @@ impl Mir {
         }
         debug_assert!(arities.len() >= self.facts.len());
         arities
+    }
+
+    pub fn clear_facts(&mut self) {
+        self.facts.clear()
     }
 
     pub fn facts(&self) -> impl Iterator<Item = (&Rel, impl Iterator<Item = &Vec<Const>>)> {

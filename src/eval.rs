@@ -1,6 +1,6 @@
 use duckdb::{Connection, Result};
 
-use crate::ast::{Const, Rel};
+use crate::ast::{Const, Rel, Rule};
 use crate::mir::Mir;
 
 #[derive(Debug)]
@@ -80,6 +80,11 @@ fn insert_fact_if_not_exists(conn: &Connection, rel: &Rel, consts: &Vec<Const>) 
     insert_fact(conn, rel, consts)
 }
 
+fn eval_rule(_conn: &Connection, _rule: &Rule) -> Result<bool> {
+    // TODO
+    Ok(false)
+}
+
 fn insert_facts(conn: &Connection, prog: &Mir) -> Result<()> {
     conn.execute_batch("BEGIN;")?;
     conn.set_prepared_statement_cache_capacity(512); // just a guess
@@ -93,6 +98,15 @@ fn insert_facts(conn: &Connection, prog: &Mir) -> Result<()> {
 }
 
 impl Eval {
+    /// Clear facts from the embedded [`Mir`] program.
+    pub fn clear_facts(&mut self) {
+        self.prog.clear_facts()
+    }
+
+    /// Create a new evaluator.
+    ///
+    /// If it makes sense for your time/space trade-off, you can call
+    /// [`Eval::clear_facts`] after this.
     pub fn new(conn: Connection, prog: Mir) -> Result<Self> {
         create_tables(&conn, &prog)?;
         insert_facts(&conn, &prog)?;
@@ -100,9 +114,16 @@ impl Eval {
     }
 
     pub fn go(&self) -> Result<usize> {
-        let iters = 1;
-        for _rule in self.prog.rules() {
-            // TODO
+        let mut iters = 0;
+        loop {
+            iters += 1;
+            let mut changed = false;
+            for rule in self.prog.rules() {
+                changed |= eval_rule(&self.conn, rule)?;
+            }
+            if !changed {
+                break;
+            }
         }
         Ok(iters)
     }
