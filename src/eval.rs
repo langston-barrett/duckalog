@@ -91,8 +91,6 @@ impl Eval {
 
 #[cfg(test)]
 mod tests {
-    use fallible_streaming_iterator::FallibleStreamingIterator;
-
     use crate::ast::{Atom, Const, Rel, Rule, Term};
 
     use super::*;
@@ -136,8 +134,15 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         let eval = Eval::new(conn, prog).unwrap();
         let conn = eval.into_connection();
-        let mut entries = conn.prepare("SELECT * from r;").unwrap();
+        let mut entries = conn.prepare("SELECT COUNT(*) from r;").unwrap();
         // TODO: Should be 1!
-        assert_eq!(2, entries.query([]).unwrap().count().unwrap());
+        let n: usize = entries
+            .query([])
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .get_unwrap(0);
+        assert_eq!(2, n);
     }
 }
