@@ -59,14 +59,14 @@ fn create_table(rel: &Rel, arity: usize) -> String {
 }
 
 fn create_tables(conn: &Connection, prog: &Mir) -> Result<()> {
-    eprintln!("BEGIN;");
+    // eprintln!("BEGIN;");
     conn.execute_batch("BEGIN;")?;
     for (rel, arity) in prog.arities() {
         let stmt = create_table(&rel, arity);
-        eprintln!("{stmt}");
+        // eprintln!("{stmt}");
         conn.execute_batch(&stmt)?;
     }
-    eprintln!("COMMIT;");
+    // eprintln!("COMMIT;");
     conn.execute_batch("COMMIT;")?;
     Ok(())
 }
@@ -84,7 +84,7 @@ fn exists(conn: &Connection, rel: &Rel, consts: &Vec<Const>) -> Result<bool> {
     }
     q += ";";
 
-    eprintln!("{q}");
+    // eprintln!("{q}");
     let mut entries = conn.prepare_cached(&q).unwrap();
     let n: usize = entries
         .query([])?
@@ -112,7 +112,7 @@ fn insert_fact(conn: &Connection, rel: &Rel, consts: &Vec<Const>) -> Result<()> 
     }
     q += ");";
 
-    eprintln!("{q}");
+    // eprintln!("{q}");
     let mut stmt = conn.prepare_cached(&q)?;
     stmt.execute([])?;
     conn.flush_prepared_statement_cache();
@@ -268,7 +268,7 @@ fn eval_rule_query(rule: &Rule, it: usize) -> Vec<String> {
 }
 
 fn insert_facts(conn: &Connection, prog: &Mir) -> Result<()> {
-    eprintln!("BEGIN;");
+    // eprintln!("BEGIN;");
     conn.execute_batch("BEGIN;")?;
     conn.set_prepared_statement_cache_capacity(512); // just a guess
     for (rel, facts) in prog.facts() {
@@ -276,7 +276,7 @@ fn insert_facts(conn: &Connection, prog: &Mir) -> Result<()> {
             insert_fact_if_not_exists(conn, rel, fact)?;
         }
     }
-    eprintln!("COMMIT;");
+    // eprintln!("COMMIT;");
     conn.execute_batch("COMMIT;")?;
     Ok(())
 }
@@ -309,14 +309,14 @@ impl Eval {
             }
 
             let mut changed = false;
-            eprintln!("BEGIN;");
+            // eprintln!("BEGIN;");
             self.conn.execute_batch("BEGIN;")?;
             for q in &rule_queries {
-                eprintln!("{q}");
+                // eprintln!("{q}");
                 let n_changed = self.conn.execute(q, [])?;
                 changed |= n_changed > 0;
             }
-            eprintln!("END;");
+            // eprintln!("END;");
             self.conn.execute_batch("END;")?;
             if !changed {
                 break;
