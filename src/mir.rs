@@ -31,6 +31,7 @@ impl Mir {
             .insert(consts);
     }
 
+    // TODO: This doesn't count atoms that are *only* used in bodies...
     pub fn arities(&self) -> HashMap<Rel, usize> {
         let mut arities = HashMap::with_capacity_and_hasher(
             self.facts.len(), // lower bound

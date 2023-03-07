@@ -25,6 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - run: cargo build
+    - uses: Swatinem/rust-cache@ce325b60658c1b38465c06cc965b79baf32c1e72
     - run: cargo test --no-run
     - run: cargo test
+    - run: cargo bench

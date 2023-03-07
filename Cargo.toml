@@ -12,6 +12,7 @@ repository = "https://github.com/langston-barrett/duckalog"
 
 [dev-dependencies]
 csv = "1"
+criterion = "0.3"
 
 [dependencies]
 duckdb = { version = "0.7", optional = true }
@@ -24,6 +25,10 @@ thiserror = "1"
 default = ["sqlite"]
 duckdb = ["dep:duckdb"]
 sqlite = ["dep:rusqlite"]
+
+[[bench]]
+name = "bench"
+harness = false
 
 [profile.dev]
 # Disabling debug info speeds up builds and CI. If needed for debugging, it can
