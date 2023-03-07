@@ -1,11 +1,15 @@
 //! Transitive closure
 
+#[cfg(feature = "duckdb")]
+use duckdb::Connection;
+#[cfg(feature = "sqlite")]
+use rusqlite::Connection;
+
 use duckalog::{
     ast::{Ast, Atom, Const, Rel, Rule, Term, Var},
     eval::Eval,
     mir::Mir,
 };
-use duckdb::Connection;
 
 fn main() {
     let x = Term::Var(Var::new("X".to_string()).unwrap());

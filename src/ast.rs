@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Display;
 
+#[cfg(feature = "duckdb")]
 use duckdb::types::{ToSqlOutput, ValueRef};
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, thiserror::Error)]
@@ -27,6 +28,7 @@ impl Display for Const {
     }
 }
 
+#[cfg(features = "duckdb")]
 impl duckdb::ToSql for Const {
     fn to_sql(&self) -> duckdb::Result<ToSqlOutput<'_>> {
         Ok(ToSqlOutput::Borrowed(ValueRef::Text(self.0.as_bytes())))
